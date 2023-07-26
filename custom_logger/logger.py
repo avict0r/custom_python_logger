@@ -1,3 +1,4 @@
+import json
 import logging
 import logging.config
 from enum import Enum
@@ -14,14 +15,15 @@ class LogLevels(Enum):
 
 
 class CustomLogger:
+    _created_loggers = set()  # Class-level set to store created logger names
+
     def __init__(self, logger_name: str = 'root',
                  level: LogLevels = LogLevels.WARNING,
                  handlers: list = None,
                  console_format: str = "%(log_color)s%(name)s: %(asctime)s | %(levelname)s "
                                        "| %(filename)s:%(lineno)s | %(process)d >>> %(message)s",
                  file_path: str = 'default.log',
-                 file_format: str = "[ %(levelname)s ] | %(asctime)s | %(message)s",
-                 email_settings: dict | None = None):
+                 file_format: str = "[ %(levelname)s ] | %(asctime)s | %(message)s"):
 
         """
         CustomLogger constructor.
@@ -34,7 +36,7 @@ class CustomLogger:
             file_path (str): File path for log file including the file name. Default is 'default.log'.
             file_format (str): Format string for log file. Default is "[ %(levelname)s ] | %(asctime)s | %(message)s".
         """
-
+        self._logger_name = logger_name
         self._level = level.value
 
         # Console handler formatting
@@ -45,8 +47,12 @@ class CustomLogger:
         self._file_format = file_format
 
         # Generating named logger and setting the minimum log level to display
-        self._logger = logging.getLogger(name=logger_name)
-        self._logger.setLevel(level=self._level)
+        # self._logger = logging.getLogger(name=self._logger_name)
+        # self._logger.setLevel(level=self._level)
+
+        if self._logger_name not in CustomLogger._created_loggers:
+            self._create_logger()  # Create the logger
+            CustomLogger._created_loggers.add(self._logger_name)  # Add logger name to the set
 
         if handlers:
             self._add_handler(handlers)
@@ -54,6 +60,13 @@ class CustomLogger:
             console_handler = ConsoleHandler(format_str=self._console_format)
             file_handler = FileHandler(file_path=self._filename, format_str=self._file_format)
             self._add_handler([console_handler, file_handler])
+
+    def _create_logger(self):
+        """
+        Create a new logger.
+        """
+        self._logger = logging.getLogger(name=self._logger_name)
+        self._logger.setLevel(level=self._level)
 
     # LOG levels
     def debug(self, message: str) -> None:
@@ -125,3 +138,58 @@ class CustomLogger:
                 self._logger.addHandler(handler)
             else:
                 raise ValueError("Handler should be an instance of logging.Handler")
+
+    @classmethod
+    def from_config_json(cls, json_file_path: str):
+        """
+        Create a CustomLogger instance using a JSON configuration file.
+
+        Args:
+            json_file_path (str): File path to the JSON configuration file.
+
+        Returns:
+            CustomLogger: CustomLogger instance initialized based on the configuration in the JSON file.
+        """
+        with open(json_file_path, 'r') as json_file:
+            config_data = json.load(json_file)
+
+        logger_name = config_data.get('logger_name', 'root')
+        level = LogLevels[config_data.get('level', 'WARNING').upper()]
+        console_format = config_data.get('console_format', "%(log_color)s%(name)s: %(asctime)s | %(levelname)s "
+                                                           "| %(filename)s:%(lineno)s | %(process)d >>> %(message)s")
+        file_path = config_data.get('file_path', 'default.log')
+        file_format = config_data.get('file_format', "[ %(levelname)s ] | %(asctime)s | %(message)s")
+        handlers_data = config_data.get('handlers')
+
+        logger = cls(logger_name=logger_name, level=level, console_format=console_format, file_path=file_path,
+                     file_format=file_format)
+
+        handlers = []
+        for handler_data in handlers_data:
+            handler_type = handler_data.get('type')
+            handler_level = LogLevels[handler_data.get('level', 'WARNING').upper()]
+            handler_format_str = handler_data.get('format_str')
+
+            if handler_type == 'ConsoleHandler':
+                log_colors = handler_data.get('log_colors', {})
+                handler = ConsoleHandler(format_str=handler_format_str, log_colors=log_colors)
+            elif handler_type == 'FileHandler':
+                filename = handler_data.get('filename', 'app.log')
+                handler = FileHandler(file_path=filename, format_str=handler_format_str)
+            elif handler_type == 'EmailHandler':
+                mailhost = handler_data.get('mailhost')
+                fromaddr = handler_data.get('fromaddr')
+                toaddrs = handler_data.get('toaddrs', [])
+                subject = handler_data.get('subject', 'Log Message')
+                credentials = handler_data.get('credentials', [])
+                handler = EmailHandler(mailhost=mailhost, fromaddr=fromaddr, toaddrs=toaddrs, subject=subject,
+                                       credentials=credentials, format_str=handler_format_str)
+            else:
+                raise ValueError(f"Unknown handler type: {handler_type}")
+
+            handler.setLevel(handler_level.value)
+            handlers.append(handler)
+
+        logger._add_handler(handlers)
+
+        return logger

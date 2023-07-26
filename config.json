@@ -1,0 +1,27 @@
+{
+  "logger_name": "root",
+  "level": "DEBUG",
+  "console_format": "%(asctime)s - %(name)s - %(levelname)s - %(name)s - %(message)s",
+  "file_path": "app.log",
+  "file_format": "[%(levelname)s] - %(asctime)s - %(name)s - %(message)s",
+  "handlers": [
+    {
+      "type": "ConsoleHandler",
+      "level": "DEBUG",
+      "format_str": "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+      "log_colors": {
+        "DEBUG": "white",
+        "INFO": "green",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red"
+      }
+    },
+    {
+      "type": "FileHandler",
+      "level": "WARNING",
+      "format_str": "[%(levelname)s] - %(asctime)s - %(name)s - %(message)s",
+      "filename": "app.log"
+    }
+  ]
+}
