@@ -23,7 +23,8 @@ class CustomLogger:
                  console_format: str = "%(log_color)s%(name)s: %(asctime)s | %(levelname)s "
                                        "| %(filename)s:%(lineno)s | %(process)d >>> %(message)s",
                  file_path: str = 'default.log',
-                 file_format: str = "[ %(levelname)s ] | %(asctime)s | %(message)s"):
+                 file_format: str = "[ %(levelname)s ] | %(asctime)s | %(message)s",
+                 is_from_config: bool = False):
 
         """
         CustomLogger constructor.
@@ -35,6 +36,26 @@ class CustomLogger:
             console_format (str): Format string for console logs. Default format includes log colors.
             file_path (str): File path for log file including the file name. Default is 'default.log'.
             file_format (str): Format string for log file. Default is "[ %(levelname)s ] | %(asctime)s | %(message)s".
+            is_from_config (bool, optional): Set to True if the logger is being created from a configuration file.
+                                            Default is False.
+
+        Raises:
+            ValueError: If the logger with the same name already exists.
+
+        Note:
+            If 'handlers' is provided, the 'console_handler' and 'file_handler' will not be added automatically
+            (unless 'is_from_config' is True). It's recommended to either pass 'handlers' or set 'is_from_config' to True,
+            but not both.
+
+        Example:
+            # Create a custom logger with default configuration
+            logger = CustomLogger()
+
+            # Create a custom logger with a custom level and format, and add custom handlers
+            console_handler = ConsoleHandler(format_str="%(asctime)s - %(message)s")
+            file_handler = FileHandler(file_path="app.log", format_str="[%(levelname)s] - %(asctime)s - %(message)s")
+            logger = CustomLogger(logger_name="my_logger", level=LogLevels.DEBUG, handlers=[console_handler,
+             file_handler])
         """
         self._logger_name = logger_name
         self._level = level.value
@@ -46,27 +67,22 @@ class CustomLogger:
         self._filename = file_path
         self._file_format = file_format
 
-        # Generating named logger and setting the minimum log level to display
-        # self._logger = logging.getLogger(name=self._logger_name)
-        # self._logger.setLevel(level=self._level)
+        self._is_from_config = is_from_config
 
+        # Generating named logger and setting the minimum log level to display
         if self._logger_name not in CustomLogger._created_loggers:
-            self._create_logger()  # Create the logger
+            self._logger = logging.getLogger(name=self._logger_name)
+            self._logger.setLevel(level=self._level)
             CustomLogger._created_loggers.add(self._logger_name)  # Add logger name to the set
+        else:
+            raise ValueError("Logger already exists")
 
         if handlers:
             self._add_handler(handlers)
-        else:
+        elif not self._is_from_config:
             console_handler = ConsoleHandler(format_str=self._console_format)
             file_handler = FileHandler(file_path=self._filename, format_str=self._file_format)
             self._add_handler([console_handler, file_handler])
-
-    def _create_logger(self):
-        """
-        Create a new logger.
-        """
-        self._logger = logging.getLogger(name=self._logger_name)
-        self._logger.setLevel(level=self._level)
 
     # LOG levels
     def debug(self, message: str) -> None:
@@ -162,7 +178,7 @@ class CustomLogger:
         handlers_data = config_data.get('handlers')
 
         logger = cls(logger_name=logger_name, level=level, console_format=console_format, file_path=file_path,
-                     file_format=file_format)
+                     file_format=file_format, is_from_config=True)
 
         handlers = []
         for handler_data in handlers_data:
@@ -172,10 +188,12 @@ class CustomLogger:
 
             if handler_type == 'ConsoleHandler':
                 log_colors = handler_data.get('log_colors', {})
-                handler = ConsoleHandler(format_str=handler_format_str, log_colors=log_colors)
+                handler = ConsoleHandler(format_str=handler_format_str, log_colors=log_colors,
+                                         level=handler_level.value)
             elif handler_type == 'FileHandler':
                 filename = handler_data.get('filename', 'app.log')
-                handler = FileHandler(file_path=filename, format_str=handler_format_str)
+                handler = FileHandler(file_path=filename, format_str=handler_format_str,
+                                      level=handler_level.value)
             elif handler_type == 'EmailHandler':
                 mailhost = handler_data.get('mailhost')
                 fromaddr = handler_data.get('fromaddr')
@@ -183,7 +201,8 @@ class CustomLogger:
                 subject = handler_data.get('subject', 'Log Message')
                 credentials = handler_data.get('credentials', [])
                 handler = EmailHandler(mailhost=mailhost, fromaddr=fromaddr, toaddrs=toaddrs, subject=subject,
-                                       credentials=credentials, format_str=handler_format_str)
+                                       credentials=credentials, format_str=handler_format_str,
+                                       level=handler_level.value)
             else:
                 raise ValueError(f"Unknown handler type: {handler_type}")
 
